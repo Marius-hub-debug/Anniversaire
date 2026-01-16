@@ -354,44 +354,56 @@ async function handleLogin() {
     btn.textContent = 'Connexion...';
 
     try {
-        // 1️⃣ Chercher le joueur
-        let { data: existingPlayer, error: selectError } = await supabaseClient
+        // 1️⃣ Vérifier si le joueur existe déjà
+        let { data: existingPlayer, error: fetchError } = await supabaseClient
             .from('players')
-            .select('id, name, status, is_admin')
+            .select('*')
             .eq('name', playerName)
             .maybeSingle();
 
+        if (fetchError) throw fetchError;
+
+        let player;
+
         // 2️⃣ S'il n'existe pas → on le crée
-        if (selectError && selectError.code === 'PGRST116') {
+        if (!existingPlayer) {
             const { data: newPlayer, error: insertError } = await supabaseClient
                 .from('players')
                 .insert([{ name: playerName, status: 'waiting' }])
-                .select('id, name, status, is_admin')
-                .maybeSingle();
+                .select()
+                .single();
 
             if (insertError) throw insertError;
-            existingPlayer = newPlayer;
-        } else if (selectError) {
-            throw selectError;
+            player = newPlayer;
+        } else {
+            // 3️⃣ Sinon on le réutilise
+            player = existingPlayer;
+
+            await supabaseClient
+                .from('players')
+                .update({ status: 'waiting' })
+                .eq('id', player.id);
         }
 
-        // 3️⃣ OK → on a le joueur
-        playerId = existingPlayer.id;
+        playerId = player.id;
 
-        if (existingPlayer.is_admin) {
+        // 4️⃣ MODE ADMIN
+        if (player.is_admin === true) {
             showScreen('adminScreen');
             loadAdminPlayerList();
             updateAdminWaitingCount();
-        } else {
-            showScreen('waitingScreen');
-            updateWaitingCount();
-            subscribeToChanges();
-            document.getElementById('startGameBtn').style.display = 'none';
+            return;
         }
 
+        // 5️⃣ MODE JOUEUR
+        showScreen('waitingScreen');
+        updateWaitingCount();
+        subscribeToChanges();
+        document.getElementById('startGameBtn').style.display = 'none';
+
     } catch (error) {
-        console.error('LOGIN ERROR:', error);
-        showError('Erreur Supabase (voir console F12)');
+        console.error(error);
+        showError('Erreur de connexion');
         btn.disabled = false;
         btn.textContent = 'Rejoindre la fête !';
     }
@@ -719,6 +731,14 @@ setInterval(() => {
         loadAdminPlayerList();
     }
 }, 5000);
+window.addEventListener('beforeunload', async () => {
+    if (playerId) {
+        await supabaseClient
+            .from('players')
+            .delete()
+            .eq('id', playerId);
+    }
+});
 
     </script>
 <!-- Écran Admin -->
@@ -743,6 +763,7 @@ setInterval(() => {
 
 </body>
 </html>
+
 
 
 
