@@ -364,15 +364,6 @@
 
                 playerId = data.id;
 
-// ===== DETECTION ADMIN =====
-if (data.is_admin) {
-    showScreen('adminScreen');       // Affiche l'écran admin
-    loadAdminPlayerList();           // Charge la liste des joueurs en attente
-    updateAdminWaitingCount();       // Met à jour le compteur
-    return;                          // On sort de handleLogin pour ne pas montrer l'écran joueur
-}
-// ============================
-
              if (data.is_admin) {
     showScreen('adminScreen');       // Affiche l'écran admin
     loadAdminPlayerList();           // Charge la liste des joueurs
@@ -735,5 +726,6 @@ setInterval(() => {
 
 </body>
 </html>
+
 
 
