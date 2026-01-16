@@ -705,27 +705,29 @@ setInterval(() => {
 }, 5000);
 
     </script>
-    <!-- Écran Admin -->
+<!-- Écran Admin -->
 <div id="adminScreen" class="container hidden">
     <h1>🎮 Admin Panel</h1>
-    <p class="subtitle">Gère les mini-jeux et les appariements</p>
+    <p class="subtitle">Gère les mini-jeux et les joueurs</p>
 
     <div class="info-box">
         <p><strong id="adminWaitingCount">0</strong> joueur(s) en attente</p>
     </div>
 
     <button class="btn-success" id="adminStartGameBtn">
-        ▶️ Lancer un mini-jeu pour un joueur
+        ▶️ Lancer un mini-jeu pour le premier joueur en attente
     </button>
 
     <div style="margin-top: 20px;">
-        <h3>Liste des joueurs</h3>
+        <h3>Liste des joueurs en attente</h3>
         <div id="adminPlayerList" class="player-grid"></div>
     </div>
 </div>
 
+
 </body>
 </html>
+
 
 
 
