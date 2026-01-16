@@ -359,7 +359,7 @@ async function handleLogin() {
             .from('players')
             .select('id, name, status, is_admin')
             .eq('name', playerName)
-            .single();
+            .maybeSingle();
 
         // 2️⃣ S'il n'existe pas → on le crée
         if (selectError && selectError.code === 'PGRST116') {
@@ -367,7 +367,7 @@ async function handleLogin() {
                 .from('players')
                 .insert([{ name: playerName, status: 'waiting' }])
                 .select('id, name, status, is_admin')
-                .single();
+                .maybeSingle();
 
             if (insertError) throw insertError;
             existingPlayer = newPlayer;
@@ -438,7 +438,7 @@ async function handleLogin() {
                         .from('players')
                         .insert([{ name: 'Bot 🤖', status: 'paired' }])
                         .select()
-                        .single();
+                        .maybeSingle();
                     opponentId = bot.id;
                     opponentName = bot.name;
                     await supabaseClient.from('players')
@@ -457,7 +457,7 @@ async function handleLogin() {
                         status: 'active'
                     }])
                     .select()
-                    .single();
+                    .maybeSingle();
 
                 currentPair = { ...pair, opponent_name: opponentName };
 
@@ -743,6 +743,7 @@ setInterval(() => {
 
 </body>
 </html>
+
 
 
 
