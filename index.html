@@ -391,9 +391,9 @@ async function handleLogin() {
         }
 
         // MODE JOUEUR
-        showScreen('waitingScreen');
-        updateWaitingCount();
-        subscribeToChanges();
+   showScreen('waitingScreen');
+updateWaitingCount();
+listenForPairing();
         document.getElementById('startGameBtn').style.display = 'none';
 
     } catch (err) {
@@ -733,6 +733,48 @@ window.addEventListener('beforeunload', async () => {
 });
 
     </script>
+    function listenForPairing() {
+    supabaseClient
+        .channel('pairing-' + playerId)
+        .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'pairs' },
+            async (payload) => {
+                const pair = payload.new;
+
+                if (pair.player1_id !== playerId && pair.player2_id !== playerId) return;
+
+                currentPair = pair;
+
+                // récupérer l’adversaire
+                const opponentId = pair.player1_id === playerId ? pair.player2_id : pair.player1_id;
+
+                let opponentName = 'Bot 🤖';
+                if (opponentId) {
+                    const { data } = await supabaseClient
+                        .from('players')
+                        .select('name')
+                        .eq('id', opponentId)
+                        .single();
+                    opponentName = data?.name || opponentName;
+                }
+
+                currentGame = MINIGAMES.find(g => g.id === pair.game_id);
+
+                document.getElementById('gameName').textContent = currentGame.name;
+                document.getElementById('gameDescription').textContent = currentGame.description;
+                document.getElementById('playerNameDisplay').textContent = playerName;
+                document.getElementById('opponentNameDisplay').textContent = opponentName;
+                document.getElementById('opponentName').textContent = opponentName;
+
+                showScreen('playingScreen');
+                startTimer(currentGame.duration);
+                subscribeToChanges();
+            }
+        )
+        .subscribe();
+}
+
 <!-- Écran Admin -->
 <div id="adminScreen" class="container hidden">
     <h1>🎮 Admin Panel</h1>
@@ -755,6 +797,7 @@ window.addEventListener('beforeunload', async () => {
 
 </body>
 </html>
+
 
 
 
