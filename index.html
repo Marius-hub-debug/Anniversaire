@@ -225,11 +225,13 @@
             </div>
             <h1>🎉 Mini-Jeux d'Anniversaire</h1>
             <p class="subtitle">Entre ton nom pour commencer !</p>
+        
         </div>
         
         <div id="errorContainer"></div>
         
         <input type="text" id="playerNameInput" placeholder="Ton nom..." />
+        <input type="password" id="adminPasswordInput" placeholder="Mot de passe admin (optionnel)" />
         <button class="btn-primary" id="loginBtn">
             Rejoindre la fête !
         </button>
@@ -295,6 +297,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
+        const ADMIN_PASSWORD = "M.lefol"; // change-le
         // CONFIGURATION SUPABASE - REMPLACE PAR TES CLÉS
         const SUPABASE_URL = 'https://pmbdfnxkzklecrnhdcol.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtYmRmbnhremtsZWNybmhkY29sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1NzI0MTYsImV4cCI6MjA4NDE0ODQxNn0.9ix9L-k7PCeEQDy9qhf2Uz27VqQb3cF2KQ9V1taVhqw';
@@ -342,73 +345,62 @@
         }
 
 async function handleLogin() {
-    playerName = document.getElementById('playerNameInput').value.trim();
+    const nameInput = document.getElementById('playerNameInput');
+    const adminPassInput = document.getElementById('adminPasswordInput');
+
+    playerName = nameInput.value.trim();
+    const adminPassword = adminPassInput.value.trim();
+
     if (!playerName) {
         showError('Entre ton nom !');
         return;
     }
 
     clearError();
-    const btn = document.getElementById('loginBtn');
-    btn.disabled = true;
-    btn.textContent = 'Connexion...';
+
+    const isAdmin = adminPassword === ADMIN_PASSWORD;
 
     try {
-        // 1️⃣ Vérifier si le joueur existe déjà
-        let { data: existingPlayer, error: fetchError } = await supabaseClient
+        // Nettoyer les anciens joueurs avec le même nom
+        await supabaseClient
             .from('players')
-            .select('*')
-            .eq('name', playerName)
-            .maybeSingle();
+            .delete()
+            .eq('name', playerName);
 
-        if (fetchError) throw fetchError;
+        // Créer le joueur
+        const { data, error } = await supabaseClient
+            .from('players')
+            .insert([{
+                name: playerName,
+                status: 'waiting',
+                is_admin: isAdmin
+            }])
+            .select()
+            .single();
 
-        let player;
+        if (error) throw error;
 
-        // 2️⃣ S'il n'existe pas → on le crée
-        if (!existingPlayer) {
-            const { data: newPlayer, error: insertError } = await supabaseClient
-                .from('players')
-                .insert([{ name: playerName, status: 'waiting' }])
-                .select()
-                .single();
+        playerId = data.id;
 
-            if (insertError) throw insertError;
-            player = newPlayer;
-        } else {
-            // 3️⃣ Sinon on le réutilise
-            player = existingPlayer;
-
-            await supabaseClient
-                .from('players')
-                .update({ status: 'waiting' })
-                .eq('id', player.id);
-        }
-
-        playerId = player.id;
-
-        // 4️⃣ MODE ADMIN
-        if (player.is_admin === true) {
+        // MODE ADMIN
+        if (isAdmin) {
             showScreen('adminScreen');
             loadAdminPlayerList();
             updateAdminWaitingCount();
             return;
         }
 
-        // 5️⃣ MODE JOUEUR
+        // MODE JOUEUR
         showScreen('waitingScreen');
         updateWaitingCount();
         subscribeToChanges();
         document.getElementById('startGameBtn').style.display = 'none';
 
-    } catch (error) {
-        console.error(error);
-        showError('Erreur de connexion');
-        btn.disabled = false;
-        btn.textContent = 'Rejoindre la fête !';
+    } catch (err) {
+        console.error(err);
+        showError('Erreur Supabase');
     }
 }
-
 
 
 
@@ -763,6 +755,7 @@ window.addEventListener('beforeunload', async () => {
 
 </body>
 </html>
+
 
 
 
