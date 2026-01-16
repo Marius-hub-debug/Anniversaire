@@ -685,6 +685,45 @@ async function loadAdminPlayerList() {
         console.error('Erreur admin player list:', error);
     }
 }
+        async function adminStartGameForPlayer(targetPlayer) {
+    try {
+        const currentGame = MINIGAMES[Math.floor(Math.random() * MINIGAMES.length)];
+
+        // Créer un Bot pour l’adversaire
+        const { data: bot, error: botError } = await supabaseClient
+            .from('players')
+            .insert([{ name: 'Bot 🤖', status: 'paired' }])
+            .select()
+            .single();
+
+        if (botError) throw botError;
+
+        // Créer la paire dans la table pairs
+        const { data: pair, error: pairError } = await supabaseClient
+            .from('pairs')
+            .insert([{
+                player1_id: targetPlayer.id,
+                player2_id: bot.id,
+                game_id: currentGame.id,
+                status: 'active'
+            }])
+            .select()
+            .single();
+
+        if (pairError) throw pairError;
+
+        // Mettre à jour le joueur comme “paired”
+        await supabaseClient.from('players')
+            .update({ status: 'paired' })
+            .eq('id', targetPlayer.id);
+
+        alert(`Mini-jeu lancé pour ${targetPlayer.name} !`);
+    } catch (error) {
+        console.error('Erreur admin startGame:', error);
+        alert('Impossible de lancer le mini-jeu pour ce joueur.');
+    }
+}
+
 // ----------------------
 // Event listener pour le bouton admin
 document.getElementById('adminStartGameBtn').addEventListener('click', async () => {
@@ -701,20 +740,17 @@ document.getElementById('adminStartGameBtn').addEventListener('click', async () 
             return;
         }
 
-        // Sélectionner ce joueur
-        playerId = availablePlayers[0].id;
-        playerName = availablePlayers[0].name;
+        // Lancer le mini-jeu uniquement pour ce joueur
+        await adminStartGameForPlayer(availablePlayers[0]);
 
-        // Lancer le mini-jeu
-        startGame();
-
-        // Mettre à jour la liste et le compteur pour l'admin
+        // Mettre à jour la liste et le compteur admin
         updateAdminWaitingCount();
         loadAdminPlayerList();
     } catch (error) {
         console.error('Erreur lancement admin mini-jeu:', error);
     }
 });
+
 
 // Optionnel : actualiser automatiquement la liste des joueurs toutes les 5 secondes
 setInterval(() => {
@@ -797,6 +833,7 @@ window.addEventListener('beforeunload', async () => {
 
 </body>
 </html>
+
 
 
 
