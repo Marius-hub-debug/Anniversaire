@@ -373,17 +373,17 @@ if (data.is_admin) {
 }
 // ============================
 
-                document.getElementById('welcomeText').textContent = `Bienvenue ${playerName} ! 👋`;
-                // Vérifier si c'est un admin
-if (data.is_admin) {
-    showScreen('adminScreen');  // on affiche l'écran admin
-    updateAdminWaitingCount();
-    loadAdminPlayerList();
+             if (data.is_admin) {
+    showScreen('adminScreen');       // Affiche l'écran admin
+    loadAdminPlayerList();           // Charge la liste des joueurs
+    updateAdminWaitingCount();       // Met à jour le compteur
 } else {
-    showScreen('waitingScreen'); // écran joueur normal
-    updateWaitingCount();
-    subscribeToChanges();
+    showScreen('waitingScreen');     // Écran joueur normal
+    updateWaitingCount();            // Compteur joueurs en attente
+    subscribeToChanges();            // Écoute les scores / changements
+    document.getElementById('startGameBtn').style.display = 'none'; // <-- cache le bouton
 }
+
 
             } catch (error) {
                 console.error('Erreur:', error);
@@ -735,4 +735,5 @@ setInterval(() => {
 
 </body>
 </html>
+
 
