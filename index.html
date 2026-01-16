@@ -341,48 +341,54 @@
             document.getElementById(screenId).classList.remove('hidden');
         }
 
-        async function handleLogin() {
-            playerName = document.getElementById('playerNameInput').value.trim();
-            if (!playerName) {
-                showError('Entre ton nom !');
-                return;
-            }
+       async function handleLogin() {
+    playerName = document.getElementById('playerNameInput').value.trim();
+    if (!playerName) {
+        showError('Entre ton nom !');
+        return;
+    }
 
-            clearError();
-            const btn = document.getElementById('loginBtn');
-            btn.disabled = true;
-            btn.textContent = 'Connexion...';
+    clearError();
+    const btn = document.getElementById('loginBtn');
+    btn.disabled = true;
+    btn.textContent = 'Connexion...';
 
-            try {
-                const { data, error } = await supabaseClient
-                    .from('players')
-                    .insert([{ name: playerName, status: 'waiting' }])
-                    .select()
-                    .single();
+    try {
+        // On insère le joueur ou on récupère s'il existe déjà
+        let { data, error } = await supabaseClient
+            .from('players')
+            .upsert(
+                { name: playerName, status: 'waiting' }, // insert ou update
+                { onConflict: 'name', returning: 'representation' } // évite doublons
+            )
+            .select('id, name, status, is_admin') // <-- IMPORTANT : récupérer is_admin
+            .single();
 
-                if (error) throw error;
+        if (error) throw error;
 
-                playerId = data.id;
+        playerId = data.id;
 
-             if (data.is_admin) {
-    showScreen('adminScreen');       // Affiche l'écran admin
-    loadAdminPlayerList();           // Charge la liste des joueurs
-    updateAdminWaitingCount();       // Met à jour le compteur
-} else {
-    showScreen('waitingScreen');     // Écran joueur normal
-    updateWaitingCount();            // Compteur joueurs en attente
-    subscribeToChanges();            // Écoute les scores / changements
-    document.getElementById('startGameBtn').style.display = 'none'; // <-- cache le bouton
+        if (data.is_admin) {
+            // Affiche l'écran admin
+            showScreen('adminScreen');
+            loadAdminPlayerList();
+            updateAdminWaitingCount();
+        } else {
+            // Joueur normal
+            showScreen('waitingScreen');
+            updateWaitingCount();
+            subscribeToChanges();
+            document.getElementById('startGameBtn').style.display = 'none'; // cacher le bouton
+        }
+
+    } catch (error) {
+        console.error('Erreur:', error);
+        showError('Erreur de connexion. Vérifie ta configuration Supabase !');
+        btn.disabled = false;
+        btn.textContent = 'Rejoindre la fête !';
+    }
 }
 
-
-            } catch (error) {
-                console.error('Erreur:', error);
-                showError('Erreur de connexion. Vérifie ta configuration Supabase !');
-                btn.disabled = false;
-                btn.textContent = 'Rejoindre la fête !';
-            }
-        }
 
         async function updateWaitingCount() {
             try {
@@ -727,6 +733,7 @@ setInterval(() => {
 
 </body>
 </html>
+
 
 
 
