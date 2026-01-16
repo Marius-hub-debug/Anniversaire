@@ -341,7 +341,7 @@
             document.getElementById(screenId).classList.remove('hidden');
         }
 
-       async function handleLogin() {
+async function handleLogin() {
     playerName = document.getElementById('playerNameInput').value.trim();
     if (!playerName) {
         showError('Entre ton nom !');
@@ -354,31 +354,30 @@
     btn.textContent = 'Connexion...';
 
     try {
-        // On insère le joueur ou on récupère s'il existe déjà
+        // Ajouter ou récupérer le joueur
         let { data, error } = await supabaseClient
             .from('players')
             .upsert(
-                { name: playerName, status: 'waiting' }, // insert ou update
-                { onConflict: 'name', returning: 'representation' } // évite doublons
+                { name: playerName, status: 'waiting' },
+                { onConflict: 'name', returning: 'representation' }
             )
-            .select('id, name, status, is_admin') // <-- IMPORTANT : récupérer is_admin
+            .select('id, name, status, is_admin') // récupérer is_admin
             .single();
 
         if (error) throw error;
 
         playerId = data.id;
 
+        // Affichage selon rôle
         if (data.is_admin) {
-            // Affiche l'écran admin
-            showScreen('adminScreen');
+            showScreen('adminScreen');  // <-- écran admin
             loadAdminPlayerList();
             updateAdminWaitingCount();
         } else {
-            // Joueur normal
-            showScreen('waitingScreen');
+            showScreen('waitingScreen'); // joueur normal
             updateWaitingCount();
             subscribeToChanges();
-            document.getElementById('startGameBtn').style.display = 'none'; // cacher le bouton
+            document.getElementById('startGameBtn').style.display = 'none'; // cacher bouton normal
         }
 
     } catch (error) {
@@ -388,6 +387,7 @@
         btn.textContent = 'Rejoindre la fête !';
     }
 }
+
 
 
         async function updateWaitingCount() {
@@ -733,6 +733,7 @@ setInterval(() => {
 
 </body>
 </html>
+
 
 
 
