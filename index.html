@@ -256,7 +256,6 @@
         <p class="subtitle">Gère les mini-jeux et les joueurs</p>
         <div class="info-box">
             <p><strong id="adminWaitingCount">0</strong> joueur(s) en attente</p>
-            <p style="margin-top: 10px; font-size: 14px; color: #666;">Mini-jeux restants: <strong id="gamesRemaining">7</strong></p>
         </div>
         <button class="btn-success" id="adminStartGameBtn">▶️ Lancer un mini-jeu pour TOUS</button>
         <button class="btn-danger" id="resetGamesBtn" style="margin-top: 10px;">🔄 Réinitialiser</button>
@@ -341,7 +340,6 @@
         let playerFinished = false;
         let opponentFinished = false;
         let gameChannel = null;
-        let usedGames = [];
 
         function showError(msg) {
             document.getElementById('errorContainer').innerHTML = `<div class="error-message">${msg}</div>`;
@@ -381,11 +379,9 @@
                 playerId = data.id;
 
                 if (isAdmin) {
-                    await loadUsedGames();
                     showScreen('adminScreen');
                     loadAdminPlayerList();
                     updateAdminWaitingCount();
-                    updateGamesRemaining();
                     setInterval(() => {
                         if (!document.getElementById('adminScreen').classList.contains('hidden')) {
                             updateAdminWaitingCount();
@@ -421,9 +417,7 @@
                 await supabaseClient.from('scores').delete().neq('id', '00000000-0000-0000-0000-000000000000');
                 await supabaseClient.from('pairs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
                 await supabaseClient.from('players').update({ points: 0 }).neq('id', '00000000-0000-0000-0000-000000000000');
-                usedGames = [];
-                updateGamesRemaining();
-                alert('Réinitialisé !');
+                alert('Réinitialisé ! Tous les joueurs peuvent refaire tous les mini-jeux.');
             } catch (err) {
                 console.error(err);
             }
@@ -463,7 +457,7 @@
             btn.disabled = true;
 
             try {
-                const { data: players } = await supabaseClient.from('players').select('*').eq('status', 'waiting').eq('is_admin', false).order('created_at', { ascending: true });
+                const { data: players } = await supabaseClient.from('players').select('*').eq('status', 'waiting').eq('is_admin', false);
 
                 if (!players || players.length === 0) {
                     alert('Aucun joueur !');
@@ -471,39 +465,81 @@
                     return;
                 }
 
-                let list = [...players];
+                // Appariement aléatoire
+                let list = [...players].sort(() => Math.random() - 0.5);
+                
                 if (list.length % 2 !== 0) {
                     const { data: bot } = await supabaseClient.from('players').insert([{ name: 'Bot 🤖', status: 'paired', is_admin: false, points: 0 }]).select().single();
                     list.push(bot);
                 }
 
-                const availableGames = MINIGAMES.filter(g => !usedGames.includes(g.id));
-                if (availableGames.length === 0) {
-                    alert('Tous les jeux utilisés ! Réinitialise.');
-                    btn.disabled = false;
-                    return;
+                // Récupérer les jeux déjà faits par chaque joueur
+                const { data: playerGames } = await supabaseClient
+                    .from('pairs')
+                    .select('player1_id, player2_id, game_id');
+
+                const playerHistory = {};
+                if (playerGames) {
+                    playerGames.forEach(pair => {
+                        if (!playerHistory[pair.player1_id]) playerHistory[pair.player1_id] = [];
+                        if (!playerHistory[pair.player2_id]) playerHistory[pair.player2_id] = [];
+                        playerHistory[pair.player1_id].push(pair.game_id);
+                        playerHistory[pair.player2_id].push(pair.game_id);
+                    });
                 }
 
-                const game = availableGames[Math.floor(Math.random() * availableGames.length)];
-                usedGames.push(game.id);
-                updateGamesRemaining();
+                const usedInRound = [];
+                const pairs = [];
 
+                // Créer les paires avec des jeux uniques
                 for (let i = 0; i < list.length; i += 2) {
-                    await supabaseClient.from('players').update({ status: 'paired' }).in('id', [list[i].id, list[i + 1].id]);
+                    const player1 = list[i];
+                    const player2 = list[i + 1];
+
+                    const p1Games = playerHistory[player1.id] || [];
+                    const p2Games = playerHistory[player2.id] || [];
+
+                    // Trouver un jeu que ni l'un ni l'autre n'a fait, et pas utilisé cette manche
+                    const availableForPair = MINIGAMES.filter(g => 
+                        !p1Games.includes(g.id) && 
+                        !p2Games.includes(g.id) && 
+                        !usedInRound.includes(g.id)
+                    );
+
+                    if (availableForPair.length === 0) {
+                        alert(`Impossible de trouver un jeu pour ${player1.name} et ${player2.name}. Ils ont déjà tout fait ensemble !`);
+                        btn.disabled = false;
+                        return;
+                    }
+
+                    const game = availableForPair[Math.floor(Math.random() * availableForPair.length)];
+                    usedInRound.push(game.id);
+
+                    pairs.push({
+                        player1: player1,
+                        player2: player2,
+                        game: game
+                    });
+                }
+
+                // Créer toutes les paires en base
+                for (const pair of pairs) {
+                    await supabaseClient.from('players').update({ status: 'paired' }).in('id', [pair.player1.id, pair.player2.id]);
                     await supabaseClient.from('pairs').insert([{
-                        player1_id: list[i].id,
-                        player2_id: list[i + 1].id,
-                        game_id: game.id,
+                        player1_id: pair.player1.id,
+                        player2_id: pair.player2.id,
+                        game_id: pair.game.id,
                         status: 'active'
                     }]);
                 }
 
-                alert(`Jeu "${game.name}" lancé !`);
+                alert(`${pairs.length} paires lancées !\n${pairs.map(p => `${p.player1.name} vs ${p.player2.name} → ${p.game.name}`).join('\n')}`);
                 updateAdminWaitingCount();
                 loadAdminPlayerList();
                 btn.disabled = false;
             } catch (err) {
                 console.error(err);
+                alert('Erreur : ' + err.message);
                 btn.disabled = false;
             }
         }
