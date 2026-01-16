@@ -354,15 +354,38 @@ async function handleLogin() {
     btn.textContent = 'Connexion...';
 
     try {
-        // Ajouter ou récupérer le joueur
-        let { data, error } = await supabaseClient
-            .from('players')
-            .upsert(
-                { name: playerName, status: 'waiting' },
-                { onConflict: 'name', returning: 'representation' }
-            )
-            .select('id, name, status, is_admin') // récupérer is_admin
-            .single();
+   // Supprimer tous les anciens joueurs 'waiting' sauf l'admin
+await supabaseClient
+    .from('players')
+    .delete()
+    .neq('name', 'M.Lefol'); // garde ton pseudo admin
+
+// Ajouter ou récupérer le joueur actuel
+let { data, error } = await supabaseClient
+    .from('players')
+    .upsert(
+        { name: playerName, status: 'waiting' },
+        { onConflict: 'name', returning: 'representation' }
+    )
+    .select('id, name, status, is_admin')
+    .single();
+
+if (error) throw error;
+
+playerId = data.id;
+
+// Affichage selon rôle
+if (data.is_admin) {
+    showScreen('adminScreen');  // écran admin
+    loadAdminPlayerList();
+    updateAdminWaitingCount();
+} else {
+    showScreen('waitingScreen'); // joueur normal
+    updateWaitingCount();
+    subscribeToChanges();
+    document.getElementById('startGameBtn').style.display = 'none'; // cacher bouton normal
+}
+
 
         if (error) throw error;
 
@@ -733,6 +756,7 @@ setInterval(() => {
 
 </body>
 </html>
+
 
 
 
