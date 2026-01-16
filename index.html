@@ -225,7 +225,6 @@
             </div>
             <h1>🎉 Mini-Jeux d'Anniversaire</h1>
             <p class="subtitle">Entre ton nom pour commencer !</p>
-        
         </div>
         
         <div id="errorContainer"></div>
@@ -237,18 +236,34 @@
         </button>
     </div>
 
+    <!-- Écran Admin -->
+    <div id="adminScreen" class="container hidden">
+        <h1>🎮 Admin Panel</h1>
+        <p class="subtitle">Gère les mini-jeux et les joueurs</p>
+
+        <div class="info-box">
+            <p><strong id="adminWaitingCount">0</strong> joueur(s) en attente</p>
+        </div>
+
+        <button class="btn-success" id="adminStartGameBtn">
+            ▶️ Lancer un mini-jeu pour le premier joueur
+        </button>
+
+        <div style="margin-top: 20px;">
+            <h3 style="margin-bottom: 15px;">Liste des joueurs en attente</h3>
+            <div id="adminPlayerList"></div>
+        </div>
+    </div>
+
     <!-- Écran d'attente -->
     <div id="waitingScreen" class="container hidden">
         <h1 id="welcomeText">Bienvenue !</h1>
         <p class="subtitle">Prêt pour les mini-jeux ?</p>
         
         <div class="info-box">
-            <p><strong id="waitingCount">0</strong> joueur(s) en attente</p>
+            <p>En attente qu'un admin lance un mini-jeu...</p>
+            <p style="margin-top: 10px;"><strong id="waitingCount">0</strong> joueur(s) en attente</p>
         </div>
-        
-        <button class="btn-success" id="startGameBtn">
-            ▶️ Lancer un mini-jeu !
-        </button>
     </div>
 
     <!-- Écran de jeu -->
@@ -297,8 +312,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-        const ADMIN_PASSWORD = "M.lefol"; // change-le
-        // CONFIGURATION SUPABASE - REMPLACE PAR TES CLÉS
+        const ADMIN_PASSWORD = "M.lefol";
         const SUPABASE_URL = 'https://pmbdfnxkzklecrnhdcol.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtYmRmbnhremtsZWNybmhkY29sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1NzI0MTYsImV4cCI6MjA4NDE0ODQxNn0.9ix9L-k7PCeEQDy9qhf2Uz27VqQb3cF2KQ9V1taVhqw';
         
@@ -308,7 +322,6 @@
             supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         } catch (error) {
             console.error('Erreur initialisation Supabase:', error);
-            showError('Erreur de connexion à la base de données. Vérifie tes clés Supabase !');
         }
 
         const MINIGAMES = [
@@ -323,6 +336,7 @@
 
         let playerId = null;
         let playerName = '';
+        let isAdmin = false;
         let currentPair = null;
         let currentGame = null;
         let timerInterval = null;
@@ -344,153 +358,234 @@
             document.getElementById(screenId).classList.remove('hidden');
         }
 
-async function handleLogin() {
-    const nameInput = document.getElementById('playerNameInput');
-    const adminPassInput = document.getElementById('adminPasswordInput');
+        async function handleLogin() {
+            const nameInput = document.getElementById('playerNameInput');
+            const adminPassInput = document.getElementById('adminPasswordInput');
 
-    playerName = nameInput.value.trim();
-    const adminPassword = adminPassInput.value.trim();
+            playerName = nameInput.value.trim();
+            const adminPassword = adminPassInput.value.trim();
 
-    if (!playerName) {
-        showError('Entre ton nom !');
-        return;
-    }
+            if (!playerName) {
+                showError('Entre ton nom !');
+                return;
+            }
 
-    clearError();
+            clearError();
+            const btn = document.getElementById('loginBtn');
+            btn.disabled = true;
+            btn.textContent = 'Connexion...';
 
-    const isAdmin = adminPassword === ADMIN_PASSWORD;
+            isAdmin = adminPassword === ADMIN_PASSWORD;
 
-    try {
-        // Nettoyer les anciens joueurs avec le même nom
-        await supabaseClient
-            .from('players')
-            .delete()
-            .eq('name', playerName);
+            try {
+                await supabaseClient
+                    .from('players')
+                    .delete()
+                    .eq('name', playerName);
 
-        // Créer le joueur
-        const { data, error } = await supabaseClient
-            .from('players')
-            .insert([{
-                name: playerName,
-                status: 'waiting',
-                is_admin: isAdmin
-            }])
-            .select()
-            .single();
+                const { data, error } = await supabaseClient
+                    .from('players')
+                    .insert([{
+                        name: playerName,
+                        status: 'waiting',
+                        is_admin: isAdmin
+                    }])
+                    .select()
+                    .single();
 
-        if (error) throw error;
+                if (error) throw error;
 
-        playerId = data.id;
+                playerId = data.id;
 
-        // MODE ADMIN
-        if (isAdmin) {
-            showScreen('adminScreen');
-            loadAdminPlayerList();
-            updateAdminWaitingCount();
-            return;
+                if (isAdmin) {
+                    showScreen('adminScreen');
+                    loadAdminPlayerList();
+                    updateAdminWaitingCount();
+                    startAdminRefresh();
+                } else {
+                    document.getElementById('welcomeText').textContent = `Bienvenue ${playerName} ! 👋`;
+                    showScreen('waitingScreen');
+                    updateWaitingCount();
+                    listenForPairing();
+                }
+            } catch (err) {
+                console.error(err);
+                showError('Erreur de connexion. Réessaye !');
+                btn.disabled = false;
+                btn.textContent = 'Rejoindre la fête !';
+            }
         }
-
-        // MODE JOUEUR
-   showScreen('waitingScreen');
-updateWaitingCount();
-listenForPairing();
-        document.getElementById('startGameBtn').style.display = 'none';
-
-    } catch (err) {
-        console.error(err);
-        showError('Erreur Supabase');
-    }
-}
-
-
 
         async function updateWaitingCount() {
             try {
                 const { count } = await supabaseClient
                     .from('players')
                     .select('*', { count: 'exact', head: true })
-                    .eq('status', 'waiting');
+                    .eq('status', 'waiting')
+                    .eq('is_admin', false);
                 document.getElementById('waitingCount').textContent = count || 0;
             } catch (error) {
                 console.error('Erreur comptage:', error);
             }
         }
 
-        async function startGame() {
-            const btn = document.getElementById('startGameBtn');
+        async function updateAdminWaitingCount() {
+            try {
+                const { count } = await supabaseClient
+                    .from('players')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('status', 'waiting')
+                    .eq('is_admin', false);
+                document.getElementById('adminWaitingCount').textContent = count || 0;
+            } catch (error) {
+                console.error('Erreur admin count:', error);
+            }
+        }
+
+        async function loadAdminPlayerList() {
+            try {
+                const { data } = await supabaseClient
+                    .from('players')
+                    .select('*')
+                    .eq('status', 'waiting')
+                    .eq('is_admin', false)
+                    .order('created_at', { ascending: true });
+
+                const list = document.getElementById('adminPlayerList');
+                list.innerHTML = '';
+
+                if (!data || data.length === 0) {
+                    list.innerHTML = '<p style="text-align:center; color:#666; padding:20px;">Aucun joueur en attente</p>';
+                    return;
+                }
+
+                data.forEach((player, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'player-box';
+                    div.style.marginBottom = '10px';
+                    div.innerHTML = `
+                        <p style="font-weight: bold;">${index + 1}. ${player.name}</p>
+                        <p style="font-size: 12px; color: #666;">ID: ${player.id.substring(0, 8)}...</p>
+                    `;
+                    list.appendChild(div);
+                });
+            } catch (error) {
+                console.error('Erreur admin player list:', error);
+            }
+        }
+
+        function startAdminRefresh() {
+            setInterval(() => {
+                if (!document.getElementById('adminScreen').classList.contains('hidden')) {
+                    updateAdminWaitingCount();
+                    loadAdminPlayerList();
+                }
+            }, 3000);
+        }
+
+        async function adminStartGame() {
+            const btn = document.getElementById('adminStartGameBtn');
             btn.disabled = true;
             btn.textContent = 'Lancement...';
 
             try {
-                const { data: availablePlayers } = await supabaseClient
+                const { data: players } = await supabaseClient
                     .from('players')
                     .select('*')
                     .eq('status', 'waiting')
-                    .neq('id', playerId)
-                    .limit(1);
+                    .eq('is_admin', false)
+                    .order('created_at', { ascending: true })
+                    .limit(2);
 
-                let opponentId, opponentName;
+                if (!players || players.length === 0) {
+                    alert('Aucun joueur en attente !');
+                    btn.disabled = false;
+                    btn.textContent = '▶️ Lancer un mini-jeu pour le premier joueur';
+                    return;
+                }
 
-                if (availablePlayers && availablePlayers.length > 0) {
-                    opponentId = availablePlayers[0].id;
-                    opponentName = availablePlayers[0].name;
-                    await supabaseClient.from('players')
-                        .update({ status: 'paired' })
-                        .in('id', [playerId, opponentId]);
-                } else {
+                const player1 = players[0];
+                let player2 = players.length > 1 ? players[1] : null;
+
+                if (!player2) {
                     const { data: bot } = await supabaseClient
                         .from('players')
-                        .insert([{ name: 'Bot 🤖', status: 'paired' }])
+                        .insert([{ name: 'Bot 🤖', status: 'paired', is_admin: false }])
                         .select()
-                        .maybeSingle();
-                    opponentId = bot.id;
-                    opponentName = bot.name;
-                    await supabaseClient.from('players')
-                        .update({ status: 'paired' })
-                        .eq('id', playerId);
+                        .single();
+                    player2 = bot;
                 }
 
-                currentGame = MINIGAMES[Math.floor(Math.random() * MINIGAMES.length)];
+                await supabaseClient
+                    .from('players')
+                    .update({ status: 'paired' })
+                    .in('id', [player1.id, player2.id]);
 
-                const { data: pair } = await supabaseClient
+                const randomGame = MINIGAMES[Math.floor(Math.random() * MINIGAMES.length)];
+
+                await supabaseClient
                     .from('pairs')
                     .insert([{
-                        player1_id: playerId,
-                        player2_id: opponentId,
-                        game_id: currentGame.id,
+                        player1_id: player1.id,
+                        player2_id: player2.id,
+                        game_id: randomGame.id,
                         status: 'active'
-                    }])
-                    .select()
-                    .maybeSingle();
+                    }]);
 
-                currentPair = { ...pair, opponent_name: opponentName };
+                alert(`Mini-jeu lancé pour ${player1.name} vs ${player2.name} !`);
 
-                document.getElementById('gameName').textContent = currentGame.name;
-                document.getElementById('gameDescription').textContent = currentGame.description;
-                document.getElementById('opponentName').textContent = opponentName;
-                document.getElementById('playerNameDisplay').textContent = playerName;
-                document.getElementById('opponentNameDisplay').textContent = opponentName;
+                await updateAdminWaitingCount();
+                await loadAdminPlayerList();
 
-                showScreen('playingScreen');
-                startTimer(currentGame.duration);
-
-                if (opponentName.includes('Bot')) {
-                    setTimeout(async () => {
-                        await supabaseClient.from('scores').insert([{
-                            player_id: opponentId,
-                            pair_id: pair.id,
-                            player_name: opponentName,
-                            game_name: currentGame.name,
-                            time_seconds: Math.floor(Math.random() * 10) + 15
-                        }]);
-                    }, Math.random() * 15000 + 8000);
-                }
-            } catch (error) {
-                console.error('Erreur:', error);
-                alert('Erreur lors du lancement. Réessaye !');
                 btn.disabled = false;
-                btn.textContent = '▶️ Lancer un mini-jeu !';
+                btn.textContent = '▶️ Lancer un mini-jeu pour le premier joueur';
+            } catch (error) {
+                console.error('Erreur lancement admin:', error);
+                alert('Erreur lors du lancement !');
+                btn.disabled = false;
+                btn.textContent = '▶️ Lancer un mini-jeu pour le premier joueur';
             }
+        }
+
+        function listenForPairing() {
+            const pairChannel = supabaseClient
+                .channel('pairing-' + playerId)
+                .on(
+                    'postgres_changes',
+                    { event: 'INSERT', schema: 'public', table: 'pairs' },
+                    async (payload) => {
+                        const pair = payload.new;
+
+                        if (pair.player1_id !== playerId && pair.player2_id !== playerId) return;
+
+                        currentPair = pair;
+
+                        const opponentId = pair.player1_id === playerId ? pair.player2_id : pair.player1_id;
+
+                        let opponentName = 'Bot 🤖';
+                        if (opponentId) {
+                            const { data } = await supabaseClient
+                                .from('players')
+                                .select('name')
+                                .eq('id', opponentId)
+                                .single();
+                            opponentName = data?.name || opponentName;
+                        }
+
+                        currentGame = MINIGAMES.find(g => g.id === pair.game_id);
+
+                        document.getElementById('gameName').textContent = currentGame.name;
+                        document.getElementById('gameDescription').textContent = currentGame.description;
+                        document.getElementById('playerNameDisplay').textContent = playerName;
+                        document.getElementById('opponentNameDisplay').textContent = opponentName;
+                        document.getElementById('opponentName').textContent = opponentName;
+
+                        showScreen('playingScreen');
+                        startTimer(currentGame.duration);
+                        subscribeToChanges();
+                    }
+                )
+                .subscribe();
         }
 
         function startTimer(duration) {
@@ -623,226 +718,32 @@ listenForPairing();
                 document.getElementById('opponentBox').classList.remove('finished');
                 document.getElementById('finishBtn').disabled = false;
                 document.getElementById('finishBtn').textContent = '✓ Fini !';
-                document.getElementById('startGameBtn').disabled = false;
-                document.getElementById('startGameBtn').textContent = '▶️ Lancer un mini-jeu !';
 
                 showScreen('waitingScreen');
                 updateWaitingCount();
+                listenForPairing();
             } catch (error) {
                 console.error('Erreur reset:', error);
             }
         }
 
-        // Event listeners
+        window.addEventListener('beforeunload', async () => {
+            if (playerId) {
+                await supabaseClient
+                    .from('players')
+                    .delete()
+                    .eq('id', playerId);
+            }
+        });
+
         document.getElementById('loginBtn').addEventListener('click', handleLogin);
-        document.getElementById('startGameBtn').addEventListener('click', startGame);
+        document.getElementById('adminStartGameBtn').addEventListener('click', adminStartGame);
         document.getElementById('finishBtn').addEventListener('click', handleFinish);
         document.getElementById('replayBtn').addEventListener('click', resetGame);
 
         document.getElementById('playerNameInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') handleLogin();
         });
-        // ----------------------
-// Fonctions Admin
-// ----------------------
-
-// Mettre à jour le nombre de joueurs en attente pour admin
-async function updateAdminWaitingCount() {
-    try {
-        const { count } = await supabaseClient
-            .from('players')
-            .select('*', { count: 'exact', head: true })
-            .eq('status', 'waiting');
-        document.getElementById('adminWaitingCount').textContent = count || 0;
-    } catch (error) {
-        console.error('Erreur admin count:', error);
-    }
-}
-
-// Afficher la liste des joueurs en attente pour l'admin
-async function loadAdminPlayerList() {
-    try {
-        const { data } = await supabaseClient
-            .from('players')
-            .select('*')
-            .eq('status', 'waiting');
-
-        const list = document.getElementById('adminPlayerList');
-        list.innerHTML = '';
-
-        if (!data || data.length === 0) {
-            list.innerHTML = '<p style="text-align:center; color:#666;">Aucun joueur en attente</p>';
-            return;
-        }
-
-        data.forEach(player => {
-            const div = document.createElement('div');
-            div.className = 'player-box';
-            div.innerHTML = `<p>${player.name}</p>`;
-            list.appendChild(div);
-        });
-    } catch (error) {
-        console.error('Erreur admin player list:', error);
-    }
-}
-        async function adminStartGameForPlayer(targetPlayer) {
-    try {
-        const currentGame = MINIGAMES[Math.floor(Math.random() * MINIGAMES.length)];
-
-        // Créer un Bot pour l’adversaire
-        const { data: bot, error: botError } = await supabaseClient
-            .from('players')
-            .insert([{ name: 'Bot 🤖', status: 'paired' }])
-            .select()
-            .single();
-
-        if (botError) throw botError;
-
-        // Créer la paire dans la table pairs
-        const { data: pair, error: pairError } = await supabaseClient
-            .from('pairs')
-            .insert([{
-                player1_id: targetPlayer.id,
-                player2_id: bot.id,
-                game_id: currentGame.id,
-                status: 'active'
-            }])
-            .select()
-            .single();
-
-        if (pairError) throw pairError;
-
-        // Mettre à jour le joueur comme “paired”
-        await supabaseClient.from('players')
-            .update({ status: 'paired' })
-            .eq('id', targetPlayer.id);
-
-        alert(`Mini-jeu lancé pour ${targetPlayer.name} !`);
-    } catch (error) {
-        console.error('Erreur admin startGame:', error);
-        alert('Impossible de lancer le mini-jeu pour ce joueur.');
-    }
-}
-
-// ----------------------
-// Event listener pour le bouton admin
-document.getElementById('adminStartGameBtn').addEventListener('click', async () => {
-    try {
-        // Récupérer le premier joueur en attente
-        const { data: availablePlayers } = await supabaseClient
-            .from('players')
-            .select('*')
-            .eq('status', 'waiting')
-            .limit(1);
-
-        if (!availablePlayers || availablePlayers.length === 0) {
-            alert('Aucun joueur en attente !');
-            return;
-        }
-
-        // Lancer le mini-jeu uniquement pour ce joueur
-        await adminStartGameForPlayer(availablePlayers[0]);
-
-        // Mettre à jour la liste et le compteur admin
-        updateAdminWaitingCount();
-        loadAdminPlayerList();
-    } catch (error) {
-        console.error('Erreur lancement admin mini-jeu:', error);
-    }
-});
-
-
-// Optionnel : actualiser automatiquement la liste des joueurs toutes les 5 secondes
-setInterval(() => {
-    if (!document.getElementById('adminScreen').classList.contains('hidden')) {
-        updateAdminWaitingCount();
-        loadAdminPlayerList();
-    }
-}, 5000);
-window.addEventListener('beforeunload', async () => {
-    if (playerId) {
-        await supabaseClient
-            .from('players')
-            .delete()
-            .eq('id', playerId);
-    }
-});
-
     </script>
-    function listenForPairing() {
-    supabaseClient
-        .channel('pairing-' + playerId)
-        .on(
-            'postgres_changes',
-            { event: 'INSERT', schema: 'public', table: 'pairs' },
-            async (payload) => {
-                const pair = payload.new;
-
-                if (pair.player1_id !== playerId && pair.player2_id !== playerId) return;
-
-                currentPair = pair;
-
-                // récupérer l’adversaire
-                const opponentId = pair.player1_id === playerId ? pair.player2_id : pair.player1_id;
-
-                let opponentName = 'Bot 🤖';
-                if (opponentId) {
-                    const { data } = await supabaseClient
-                        .from('players')
-                        .select('name')
-                        .eq('id', opponentId)
-                        .single();
-                    opponentName = data?.name || opponentName;
-                }
-
-                currentGame = MINIGAMES.find(g => g.id === pair.game_id);
-
-                document.getElementById('gameName').textContent = currentGame.name;
-                document.getElementById('gameDescription').textContent = currentGame.description;
-                document.getElementById('playerNameDisplay').textContent = playerName;
-                document.getElementById('opponentNameDisplay').textContent = opponentName;
-                document.getElementById('opponentName').textContent = opponentName;
-
-                showScreen('playingScreen');
-                startTimer(currentGame.duration);
-                subscribeToChanges();
-            }
-        )
-        .subscribe();
-}
-
-<!-- Écran Admin -->
-<div id="adminScreen" class="container hidden">
-    <h1>🎮 Admin Panel</h1>
-    <p class="subtitle">Gère les mini-jeux et les joueurs</p>
-
-    <div class="info-box">
-        <p><strong id="adminWaitingCount">0</strong> joueur(s) en attente</p>
-    </div>
-
-    <button class="btn-success" id="adminStartGameBtn">
-        ▶️ Lancer un mini-jeu pour le premier joueur en attente
-    </button>
-
-    <div style="margin-top: 20px;">
-        <h3>Liste des joueurs en attente</h3>
-        <div id="adminPlayerList" class="player-grid"></div>
-    </div>
-</div>
-
-
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
