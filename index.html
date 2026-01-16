@@ -363,10 +363,28 @@
                 if (error) throw error;
 
                 playerId = data.id;
+
+// ===== DETECTION ADMIN =====
+if (data.is_admin) {
+    showScreen('adminScreen');       // Affiche l'écran admin
+    loadAdminPlayerList();           // Charge la liste des joueurs en attente
+    updateAdminWaitingCount();       // Met à jour le compteur
+    return;                          // On sort de handleLogin pour ne pas montrer l'écran joueur
+}
+// ============================
+
                 document.getElementById('welcomeText').textContent = `Bienvenue ${playerName} ! 👋`;
-                showScreen('waitingScreen');
-                updateWaitingCount();
-                subscribeToChanges();
+                // Vérifier si c'est un admin
+if (data.is_admin) {
+    showScreen('adminScreen');  // on affiche l'écran admin
+    updateAdminWaitingCount();
+    loadAdminPlayerList();
+} else {
+    showScreen('waitingScreen'); // écran joueur normal
+    updateWaitingCount();
+    subscribeToChanges();
+}
+
             } catch (error) {
                 console.error('Erreur:', error);
                 showError('Erreur de connexion. Vérifie ta configuration Supabase !');
@@ -613,6 +631,108 @@
         document.getElementById('playerNameInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') handleLogin();
         });
+        // ----------------------
+// Fonctions Admin
+// ----------------------
+
+// Mettre à jour le nombre de joueurs en attente pour admin
+async function updateAdminWaitingCount() {
+    try {
+        const { count } = await supabaseClient
+            .from('players')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'waiting');
+        document.getElementById('adminWaitingCount').textContent = count || 0;
+    } catch (error) {
+        console.error('Erreur admin count:', error);
+    }
+}
+
+// Afficher la liste des joueurs en attente pour l'admin
+async function loadAdminPlayerList() {
+    try {
+        const { data } = await supabaseClient
+            .from('players')
+            .select('*')
+            .eq('status', 'waiting');
+
+        const list = document.getElementById('adminPlayerList');
+        list.innerHTML = '';
+
+        if (!data || data.length === 0) {
+            list.innerHTML = '<p style="text-align:center; color:#666;">Aucun joueur en attente</p>';
+            return;
+        }
+
+        data.forEach(player => {
+            const div = document.createElement('div');
+            div.className = 'player-box';
+            div.innerHTML = `<p>${player.name}</p>`;
+            list.appendChild(div);
+        });
+    } catch (error) {
+        console.error('Erreur admin player list:', error);
+    }
+}
+// ----------------------
+// Event listener pour le bouton admin
+document.getElementById('adminStartGameBtn').addEventListener('click', async () => {
+    try {
+        // Récupérer le premier joueur en attente
+        const { data: availablePlayers } = await supabaseClient
+            .from('players')
+            .select('*')
+            .eq('status', 'waiting')
+            .limit(1);
+
+        if (!availablePlayers || availablePlayers.length === 0) {
+            alert('Aucun joueur en attente !');
+            return;
+        }
+
+        // Sélectionner ce joueur
+        playerId = availablePlayers[0].id;
+        playerName = availablePlayers[0].name;
+
+        // Lancer le mini-jeu
+        startGame();
+
+        // Mettre à jour la liste et le compteur pour l'admin
+        updateAdminWaitingCount();
+        loadAdminPlayerList();
+    } catch (error) {
+        console.error('Erreur lancement admin mini-jeu:', error);
+    }
+});
+
+// Optionnel : actualiser automatiquement la liste des joueurs toutes les 5 secondes
+setInterval(() => {
+    if (!document.getElementById('adminScreen').classList.contains('hidden')) {
+        updateAdminWaitingCount();
+        loadAdminPlayerList();
+    }
+}, 5000);
+
     </script>
+    <!-- Écran Admin -->
+<div id="adminScreen" class="container hidden">
+    <h1>🎮 Admin Panel</h1>
+    <p class="subtitle">Gère les mini-jeux et les appariements</p>
+
+    <div class="info-box">
+        <p><strong id="adminWaitingCount">0</strong> joueur(s) en attente</p>
+    </div>
+
+    <button class="btn-success" id="adminStartGameBtn">
+        ▶️ Lancer un mini-jeu pour un joueur
+    </button>
+
+    <div style="margin-top: 20px;">
+        <h3>Liste des joueurs</h3>
+        <div id="adminPlayerList" class="player-grid"></div>
+    </div>
+</div>
+
 </body>
 </html>
+
